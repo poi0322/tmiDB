@@ -131,11 +131,34 @@ git commit -m "Update tmidb-core submodule"
 git push
 ```
 
-### 모든 Submodules 최신 버전으로 업데이트
+### 🚀 자동 업데이트 (권장)
+
+**1. 스크립트를 사용한 간편 업데이트:**
+
+```bash
+./update_submodules.sh
+```
+
+이 스크립트는 다음을 자동으로 수행합니다:
+
+- 메인 저장소 최신 상태로 업데이트
+- 모든 submodules를 최신 버전으로 업데이트
+- 변경사항 확인 및 커밋
+- 원격 저장소에 푸시
+
+**2. GitHub Actions 자동 업데이트:**
+
+- 매일 한국 시간 오전 9시에 자동 실행
+- GitHub의 Actions 탭에서 수동 실행 가능
+- 개별 submodule 업데이트 시 자동 트리거 (webhook 설정 시)
+
+### 수동 업데이트
+
+**모든 Submodules 최신 버전으로 업데이트:**
 
 ```bash
 # 모든 submodules를 최신 버전으로 업데이트
-git submodule update --remote
+git submodule update --remote --merge
 
 # 변경사항이 있으면 커밋
 git add .
@@ -143,11 +166,11 @@ git commit -m "Update all submodules to latest"
 git push
 ```
 
-### 특정 Submodule만 업데이트
+**특정 Submodule만 업데이트:**
 
 ```bash
 # 특정 submodule만 업데이트
-git submodule update --remote tmidb-core
+git submodule update --remote --merge tmidb-core
 
 git add tmidb-core
 git commit -m "Update tmidb-core to latest"
@@ -169,10 +192,11 @@ docker compose up
 ## 🔍 장점
 
 1. **독립적인 개발**: 각 모듈을 독립적으로 개발하고 배포 가능
-2. **버전 관리**: 각 모듈의 버전을 독립적으로 관리
+2. **자동 버전 관리**: 각 모듈의 최신 버전을 자동으로 추적
 3. **권한 관리**: 모듈별로 다른 접근 권한 설정 가능
 4. **CI/CD**: 각 모듈별로 독립적인 CI/CD 파이프라인 구성 가능
 5. **전체 관리**: 메인 저장소에서 전체 프로젝트 오케스트레이션
+6. **자동화**: GitHub Actions를 통한 완전 자동 업데이트
 
 ## ⚠️ 주의사항
 
