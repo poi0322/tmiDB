@@ -24,19 +24,46 @@ tmiDB는 세 가지 핵심 요소로 동작합니다.
 
 - **실시간 스트리밍**: Supabase Realtime 엔진을 통해 데이터베이스의 모든 변경사항(INSERT, UPDATE, DELETE)을 리스너에게 즉시 전달합니다.
 
-## 시작하기
+## 실행 방법
+
+### 사전 준비
+
+- Docker를 설치해야 합니다.
+
+### 개발 모드 (Live Reloading 지원)
+
+소스 코드 변경 시 자동으로 서비스를 다시 빌드하고 실행합니다.
 
 ```bash
-# Docker Compose로 모든 서비스를 한번에 실행합니다.
-docker-compose up -d
+# 개발 모드로 모든 서비스를 실행합니다.
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+```
 
+### 프로덕션 모드
+
+사전에 빌드된 이미지를 사용하여 프로덕션 환경으로 서비스를 실행합니다.
+
+```bash
+# 프로덕션 모드로 모든 서비스를 실행합니다.
+docker compose up --build
+```
+
+### 서비스 중지
+
+```bash
+docker compose down
+```
+
+## 사용 예시
+
+```bash
 # 새로운 '대상'을 생성합니다.
-curl -X POST http://localhost:3000/target \
+curl -X POST http://localhost:8080/target \
   -H "Content-Type: application/json" \
   -d '{ "name": "server-01", "meta": { "ip": "192.168.0.10", "status": "online" } }'
 
 # 'server-01'의 CPU 사용률 데이터를 추가합니다. (Speaker 역할)
-curl -X POST http://localhost:3000/ts_obs \
+curl -X POST http://localhost:8080/ts_obs \
     -H "Content-Type: application/json" \
     -d '{ "target_id": "<server-01의 target_id>", "payload": { "cpu_usage": 15.5 } }'
 

@@ -8,31 +8,13 @@
 
 | 계층 | 컴포넌트 | 라이선스 | 비고 |⸻
 
-## 8. 초기 로드맵
-
-| 주  | 목표                               |
-| --- | ---------------------------------- |
-| 1   | 레포·Compose 기동 / DB 초기 스키마 |
-| 2   | pollingd → raw_bucket INSERT       |
-| 3   | normsvc AI 매핑 → 정규 테이블      |
-| 4   | Realtime WS / stream_def 적용      |
-| 5   | alarm_engine 임계값 알람           |
-| 6   | 콘솔 MVP·tmictl CLI 배포           |
-| 7   | **A-방식 래퍼 패키징 & 브랜딩**    |
-
 ⸻
-
-## 9. 라이선스 파일---|---------|------|
 
 | **DB 엔진** | PostgreSQL 15 | PostgreSQL (BSD) | 기반 RDB |
 | **시계열** | TimescaleDB 2.18 **코어** | Apache-2.0 | `compress_chunks` 까지만 사용 |
 | **공간 / 거리** | `cube` + `earthdistance` | BSD | 반경·근접 질의 |
 | **객체 스토리지** | SeaweedFS S3 Gateway | Apache-2.0 | MinIO 대체 |
-| **스트림** | Supabase Realtime | MIT | logical decoding WS |
-| **REST** | PostgREST | MIT | 스키마→REST |
 | **메시지 버스** | NATS JetStream | Apache-2.0 | ETL·알람 |
-| **ETL / AI** | pollingd · normsvc · alarm_engine (Go) | MIT | 내부 코드 |
-| **ONNX Runtime** | MIT | AI 추론 |
 
 > **GPL/AGPL 전혀 없음** — 상용/SaaS 재배포 100 % 안전.
 
@@ -52,131 +34,54 @@ tmiDB는 특정 **대상(Target)**에 대한 모든 정보를 중앙에서 관�
 - **자동화된 API 생성 및 버전 관리**: 대상의 데이터 구조가 변경되면, 그에 맞춰 REST API가 자동으로 업데이트되고 버전이 부여됩니다. 이는 gRPC와 유사한 방식으로 API 호환성을 보장합니다.
 - **유연한 데이터 수집**: Speaker는 DB 쿼리, REST API 등 다양한 방식으로 데이터를 입력할 수 있습니다. 또한, 특정 웹 페이지의 URL을 등록하면 tmiDB 내부의 코드가 주기적으로 해당 페이지의 정보를 수집하여 저장하는 기능도 제공합니다.
 
----
+## 2.1. 보안 및 인증
 
-## 3. 핵심 테이블
+tmiDB는 내부 시스템과 외부 API 사용자를 위한 명확한 보안 및 인증 체계를 가집니다.
 
-```sql
--- 대상 (Target): 정보를 수집할 주체. 사람, 사물, 서비스 등 모든 것이 될 수 있습니다.
-CREATE TABLE target(
-  target_id UUID PRIMARY KEY,
-  name TEXT,
-  meta JSONB, -- 동적 속성
-  created_at TIMESTAMPTZ DEFAULT now()
-);
+### 인증 방식
 
--- 시계열 관측 데이터 (Hypertable)
-CREATE TABLE ts_obs(
-  obs_id BIGSERIAL PRIMARY KEY,
-  target_id UUID NOT NULL REFERENCES target(target_id),
-  ts TIMESTAMPTZ NOT NULL,
-  payload JSONB -- 측정된 모든 데이터를 JSON으로 저장
-);
-SELECT create_hypertable('ts_obs', 'ts',
-  partitioning_column => 'target_id', number_partitions => 8);
+API 및 서비스 접근은 두 가지 방식으로 인증됩니다.
 
--- 위치 추적 데이터
-CREATE EXTENSION IF NOT EXISTS cube;
-CREATE EXTENSION IF NOT EXISTS earthdistance;
-CREATE TABLE geo_trace(
-  target_id UUID,
-  ts TIMESTAMPTZ,
-  lon DOUBLE PRECISION, lat DOUBLE PRECISION,
-  PRIMARY KEY(target_id, ts),
-  FOREIGN KEY (target_id) REFERENCES target(target_id)
-);
-CREATE INDEX idx_geo_gist
-  ON geo_trace USING gist (ll_to_earth(lat, lon));
+1.  **ID / Password**: 사용자 계정의 아이디와 비밀번호를 이용한 기본 인증입니다.
+2.  **API 토큰 (`database-token`)**: 사용자가 발급받은 Bearer 토큰을 이용한 인증입니다. 자동화된 스크립트나 외부 서비스 연동에 권장됩니다.
 
--- 원본 수집
-CREATE TABLE raw_bucket(
-  raw_id BIGSERIAL PRIMARY KEY,
-  ts TIMESTAMPTZ DEFAULT now(),
-  payload JSONB
-);
+### 토큰 관리 정책
 
--- 버전·커넥터·매핑 메타 (요약)
-CREATE TABLE model_versions(...);
-CREATE TABLE ingest_connector(...);
-CREATE TABLE mapping_rule(...);
-```
+- **발급**: 사용자는 여러 개의 API 토큰을 생성하여 용도에 따라 관리할 수 있습니다. 토큰은 계정이 생성될 때 기본적으로 하나가 발급될 수 있으며, 추가 발급도 가능합니다.
+- **권한**:
+  - **관리자 (Admin)**: 시스템에 등록된 모든 사용자의 토큰 목록을 조회하고, 특정 토큰을 강제로 삭제할 수 있는 권한을 가집니다.
+  - **일반 사용자 (Viewer 등)**: 자신이 발급받은 토큰만 조회하고 관리할 수 있습니다.
 
 ⸻
 
-3. 아키텍처
+## 4. 아키텍처 (v0.3 - 최종)
 
-graph TD
-UI[🌐 tmiDB Console] --> PGRST
-UI --> RT
-CLI[tmictl] --> DB
+**핵심 설계 원칙: 독립적인 프로젝트 모듈 (Independent Project Modules)**
 
-subgraph Services
-CONNECT[🔌 pollingd] --> NATS
-NORM[🔧 normsvc] --> DB
-ALARM[🚨 alarm_engine] --> DB
-PGRST[PostgREST] --> DB
-RT[Realtime] --> DB
-end
+tmiDB는 하나의 거대한 모노레포가 아닌, 기능 단위로 명확하게 분리된 여러 개의 독립적인 프로젝트로 구성됩니다. 각 프로젝트는 자체적인 소스 코드, 의존성, 빌드 및 배포 설정을 가집니다. 이를 통해 각 기능 모듈(제품)을 독립적으로 개발, 테스트, 배포할 수 있습니다.
 
-subgraph Core
-DB[(PostgreSQL + Timescale<br>+ cube/earthdistance)]
-S3[(SeaweedFS S3)]
-NATS[(NATS JetStream)]
-end
+### 4.1. 프로젝트 구조
 
-S3 --> DB
-DB --> NATS
+- **tmidb-core/**: 데이터베이스, 웹 콘솔, 핵심 API 등 tmiDB의 기본 기능을 제공하는 코어 프로젝트입니다. `poi0322/tmidb-core:0.1` 이미지를 빌드합니다.
+- **tmidb-mqtt/**: MQTT 프로토콜을 통한 데이터 수집 및 publish를 담당하는 확장 모듈 프로젝트입니다. `poi0322/tmidb-mqtt:0.1` 이미지를 빌드합니다.
+- **tmidb-realtime/**: WebSocket을 통한 실시간 데이터 수집 및 스트리밍을 담당하는 확장 모듈 프로젝트입니다. `poi0322/tmidb-realtime:0.1` 이미지를 빌드합니다.
 
-⸻
+### TODO
 
-4. Docker Compose(요약)
+- **tmidb-poller/**: 데이터 수집기 프로젝트입니다. `poi0322/tmidb-poller:0.1` 이미지를 빌드합니다.
 
-services:
-db:
-image: timescale/timescaledb:2.18-pg15
-environment:
-POSTGRES_PASSWORD: postgres
-command: >
-postgres -c timescaledb.telemetry_level=off
--c timescaledb.license='apache'
-volumes: [db_data:/var/lib/postgresql/data]
-ports: ["5432:5432"]
+### 4.2. 실행 및 오케스트레이션
 
-seaweed:
-image: seaweedfs/seaweedfs:3.67
-command: "server -s3 -dir=/data -volume.max=0"
-volumes: [weed_data:/data]
-ports: ["8333:8333","9333:9333"]
+실행 순서는 `README.md`에 명시된 대로, `tmidb-core` 뒤, 필요한 확장 모듈들을 순차적으로 실행합니다.
 
-nats:
-image: nats:2.10-alpine
-command: "--jetstream --store_dir=/data"
-volumes: [nats_data:/data]
-ports: ["4222:4222"]
+### 4.3. 쓰기 경로 이원화 (Write Path Strategy)
 
-postgrest:
-image: postgrest/postgrest:v12
-environment:
-PGRST_DB_URI: postgres://postgres:postgres@db:5432/postgres
-PGRST_DB_ANON_ROLE: postgres
-ports: ["3000:3000"]
-
-realtime:
-image: supabase/realtime:v2.30
-environment:
-DB_HOST: db
-DB_USER: postgres
-DB_PASSWORD: postgres
-ports: ["4000:4000"]
-
-volumes:
-db_data:
-weed_data:
-nats_data:
+- **동기 쓰기 (Synchronous Write)**: 사용자 생성, 설정 변경 등 즉각적인 피드백이 필요하고 트랜잭션이 중요한 요청입니다. API 게이트웨이가 직접 DB 커넥션을 사용하여 처리합니다.
+- **비동기 쓰기 (Asynchronous Write)**: IoT 센서 데이터, 로그 등 대량으로 수집되는 데이터입니다. 데이터 수집기(mqtt)는 받은 데이터를 NATS에 발행하기만 합니다. 실제 DB에 쓰는 작업은 Worker가 NATS 큐를 통해 순차적이고 안정적으로 처리하여 DB 부하를 최소화합니다.
 
 ⸻
 
-5. 초기 로드맵
+## 6. 초기 로드맵
 
 주 목표
 1 레포·Compose 기동 / DB 초기 스키마
@@ -188,7 +93,7 @@ nats_data:
 
 ⸻
 
-6. 라이선스 파일
+7. 라이선스 파일
 
 LICENSE → MIT
 Each Go/TS file → SPDX-License-Identifier: MIT
@@ -198,99 +103,6 @@ tmiDB 전체 스택은 MIT/Apache/BSD 만을 사용하여,
 
 ---
 
-## 7. A-방식 래퍼 브랜딩 전략
-
-**tmiDB 브랜드를 전면에 노출시키는 체크리스트**
-
-| 화면·명령어                           | 기본 PostgreSQL 동작            | tmiDB 표시 방법                                        | 실제 구현 지점                                                |
-| ------------------------------------- | ------------------------------- | ------------------------------------------------------ | ------------------------------------------------------------- |
-| systemd 서비스                        | `postgresql.service`            | `tmidbd.service`<br>Description= tmiDB Database Engine | 패키지 post-install 스크립트에서<br>`systemctl enable tmidbd` |
-| 프로세스 목록<br>`ps aux`             | `postgres … -D /var/lib/…`      | `tmidbd … -D /var/lib/tmidb/data`<br>(런처 이름)       | `/usr/bin/tmidbd` → `exec postgres`                           |
-| psql 프롬프트                         | `postgres=#`                    | `tmiDB:postgres=#`                                     | `ALTER SYSTEM SET prompt1='tmiDB:%/%R%# ';`                   |
-| pg_stat_activity.<br>application_name | 빈값 또는 psql                  | tmiDB-Core (서버)<br>tmiDB-CLI (클라이언트)            | 런처에서 PGAPPNAME ENV 주입                                   |
-| 로그·배너                             | `LOG: database system is ready` | `=== tmiDB 0.1 ready ===`                              | entrypoint 첫 줄 echo                                         |
-| REST Swagger 제목                     | "PostgREST API"                 | "tmiDB API"                                            | `PGRST_OPENAPI_TITLE=tmiDB API` ENV                           |
-| Realtime WebSocket path               | `/realtime/v1`                  | `/tmi/ws` (reverse-proxy 리라이트)                     | Nginx rewrite or RT `WS_PATH` ENV                             |
-| 콘솔 웹 UI 로고                       | Supabase 로고                   | tmiDB 로고 PNG/SVG                                     | React `src/assets/logo.svg` 교체                              |
-| CLI                                   | 없음                            | `tmictl` (install / status / backup)                   | Go Cobra 바이너리                                             |
-
-### 구현 순서
-
-**1. 런처 바이너리 (Go 140 줄)**
-
-```go
-cmd := exec.Command(
-    "/opt/tmidb/bin/postgres",
-    "-D", "/opt/tmidb/data",
-    "-c", "config_file=/etc/tmidb/tmi_db.conf",
-)
-cmd.Env = append(os.Environ(), "PGAPPNAME=tmiDB-Core")
-cmd.Run()
-```
-
-**2. systemd 유닛 파일** `/usr/lib/systemd/system/tmidbd.service`
-
-```ini
-[Unit]
-Description=tmiDB Database Engine
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/tmidbd start
-ExecStop=/usr/bin/tmidbd stop
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-```
-
-**3. psql 프롬프트 / 로그 배너**
-
-```bash
-echo "ALTER SYSTEM SET prompt1='tmiDB:%/%R%# ';" | psql -U postgres
-echo "=== tmiDB $(tmictl version) ready ===" >> /opt/tmidb/log/startup.log
-```
-
-**4. PostgREST / Realtime 환경변수**
-
-```bash
-export PGRST_OPENAPI_TITLE="tmiDB API"
-export PGRST_OPENAPI_SERVER_PROXY_URI="https://api.tmidb.io"
-export WS_PATH="/tmi/ws"
-```
-
-**5. 웹 콘솔**
-
-- `APP_TITLE = 'tmiDB Console'`
-- favicon & logo 교체 → `public/favicon.ico`, `logo.svg`
-
-**6. 패키지 네이밍**
-
-- `.deb` → `tmidb-engine_0.1.0_amd64.deb`
-- 패키지 설명: "tmiDB Core (PostgreSQL-based) Database Server"
-
-### 결과 UX 스냅샷
-
-```bash
-$ sudo systemctl status tmidbd
-● tmidbd.service - tmiDB Database Engine
-   Active: active (running) since Fri 2025-06-20 10:12:05 KST
-
-$ psql -h localhost -U postgres
-tmiDB:postgres=# SHOW shared_buffers;
- shared_buffers
-───────────────
- 4GB
-(1 row)
-```
-
-**웹 콘솔 상단** ⇒ tmiDB Console / **Swagger** ⇒ tmiDB API / **WS URL** ⇒ `wss://api.tmidb.io/tmi/ws`
-
-### 요약
-
-- **래퍼-패키지(A) 그대로 두면서도**, 서비스명·프롬프트·로그·UI를 일괄 덮어써 "진짜 tmiDB 전용 엔진" 인상을 완벽히 준다.
-- **Postgres 업스트림 머지 0 줄, 라이선스 위험 0** — 유지보수 난도는 MySQL-식 패키지 수준.
 
 ⸻
 
@@ -299,24 +111,11 @@ tmiDB:postgres=# SHOW shared_buffers;
 | 주  | 목표                               |
 | --- | ---------------------------------- |
 | 1   | 레포·Compose 기동 / DB 초기 스키마 |
-| 2   | pollingd → raw_bucket INSERT       |
-| 3   | normsvc AI 매핑 → 정규 테이블      |
-| 4   | Realtime WS / stream_def 적용      |
-| 5   | alarm_engine 임계값 알람           |
+| 2   | INSERT                             |
+| 3   | 정규 테이블                        |
+| 4   | Realtime WS                        |
+| 5   |                                    |
 | 6   | 콘솔 MVP·tmictl CLI 배포           |
-| 7   | **A-방식 래퍼 패키징 & 브랜딩**    |
-
-⸻
-
-## 10. 확장 로드맵 (v0.2+)
-
-| 기능                   | 설명                                                                                                                    | 핵심 기술                           |
-| ---------------------- | ----------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| **웹 기반 대시보드**   | 수집된 시계열(`ts_obs`), 위치(`geo_trace`) 데이터를 그래프와 지도로 시각화하고, 특정 Target의 정보를 모니터링하는 웹 UI | React/SvelteKit, ECharts/Leaflet.js |
-| **고급 인증/인가**     | 대상(Target)별, 리스너(Listener)별로 세분화된 접근 제어(RBAC/ABAC)                                                      | Open Policy Agent, Casbin           |
-| **서버리스 코드 실행** | 특정 이벤트(예: 데이터 수신) 발생 시, 사용자가 등록한 코드를 실행하여 데이터를 변환, 가공, 알림 전송                    | Deno/Wasm, NATS Functions           |
-| **분산 쿼리**          | 여러 tmiDB 인스턴스를 클러스터로 묶어 대규모 데이터셋에 대한 통합 쿼리 실행                                             | Citus, Trino                        |
-| **백업 및 복구 CLI**   | `tmictl backup`, `tmictl restore` 명령어를 통한 손쉬운 데이터 백업 및 복구                                              | pg_dump, pg_restore, Restic         |
 
 ⸻
 

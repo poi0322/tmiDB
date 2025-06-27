@@ -1,0 +1,210 @@
+<div class="container mx-auto px-4 py-8">
+  <div class="max-w-7xl mx-auto">
+    <div class="mb-8">
+      <h1 class="text-3xl font-bold text-gray-900">관리자 대시보드</h1>
+      <p class="mt-2 text-gray-600">tmiDB 시스템 관리 및 모니터링</p>
+    </div>
+
+    <!-- 시스템 상태 카드 -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <div class="w-8 h-8 bg-green-500 rounded-md flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">시스템 상태</dt>
+                <dd class="text-lg font-medium text-gray-900">정상</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <div class="w-8 h-8 bg-blue-500 rounded-md flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">등록된 사용자</dt>
+                <dd id="userCount" class="text-lg font-medium text-gray-900">
+                  {{if .user_count}}
+                  {{ .user_count }}
+                  {{else}}0{{end}}
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <div class="w-8 h-8 bg-purple-500 rounded-md flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m0 0a2 2 0 012 2m-2-2a2 2 0 00-2 2m0 0a2 2 0 01-2 2m2-2a2 2 0 002 2M9 5a2 2 0 012 2v0a2 2 0 01-2 2m0 0a2 2 0 012 2v0a2 2 0 01-2 2m-2-2a2 2 0 00-2 2v0a2 2 0 01-2 2m2-2a2 2 0 012 2M7 5a2 2 0 012 2v0a2 2 0 01-2 2"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">활성 토큰</dt>
+                <dd id="tokenCount" class="text-lg font-medium text-gray-900">
+                  {{if .token_count}}
+                  {{ .token_count }}
+                  {{else}}0{{end}}
+                </dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <div class="flex items-center">
+            <div class="flex-shrink-0">
+              <div class="w-8 h-8 bg-indigo-500 rounded-md flex items-center justify-center">
+                <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="ml-5 w-0 flex-1">
+              <dl>
+                <dt class="text-sm font-medium text-gray-500 truncate">DB 연결</dt>
+                <dd class="text-lg font-medium {{if eq .stats.status "Connected"}}text-green-600{{else}}text-red-600{{end}}">{{.stats.status}}</dd>
+              </dl>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 최근 활동 -->
+    <div class="mt-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
+      <!-- 최근 등록 사용자 -->
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <h3 class="text-lg font-medium text-gray-900">최근 등록 사용자</h3>
+          <div class="mt-4 flow-root">
+            <ul role="list" class="-my-5 divide-y divide-gray-200">
+              {{range .recent_users}}
+              <li class="py-4">
+                <div class="flex items-center space-x-4">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">{{.username}}</p>
+                    <p class="text-sm text-gray-500 truncate">역할: {{.role}}</p>
+                  </div>
+                  <div>
+                    <span class="text-sm text-gray-500">{{.created_at.Format "2006-01-02"}}</span>
+                  </div>
+                </div>
+              </li>
+              {{else}}
+                <p class="text-sm text-gray-500">최근 등록된 사용자가 없습니다.</p>
+                {{end}}
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <!-- 최근 생성 토큰 -->
+      <div class="bg-white overflow-hidden shadow rounded-lg">
+        <div class="p-5">
+          <h3 class="text-lg font-medium text-gray-900">최근 생성 토큰</h3>
+          <div class="mt-4 flow-root">
+            <ul role="list" class="-my-5 divide-y divide-gray-200">
+              {{range .recent_tokens}}
+              <li class="py-4">
+                <div class="flex items-center space-x-4">
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium text-gray-900 truncate">{{.description}}</p>
+                    <p class="text-sm text-gray-500 truncate">권한: {{if .is_admin}}Admin
+                      {{else}}Read-only{{end}}
+                    </p>
+                  </div>
+                  <div>
+                    <span class="text-sm text-gray-500">{{.created_at.Format "2006-01-02"}}</span>
+                  </div>
+                </div>
+              </li>
+              {{else}}
+                <p class="text-sm text-gray-500">최근 생성된 토큰이 없습니다.</p>
+                {{end}}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 빠른 액션 -->
+    <div class="bg-white shadow rounded-lg p-6 mt-8">
+      <h2 class="text-lg font-medium text-gray-900 mb-4">빠른 액션</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <a href="/users" class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div class="flex-shrink-0">
+            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
+            </svg>
+          </div>
+          <div class="ml-4">
+            <h3 class="text-sm font-medium text-gray-900">사용자 관리</h3>
+            <p class="text-sm text-gray-500">사용자 추가, 편집, 삭제</p>
+          </div>
+        </a>
+
+        <a href="/tokens" class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div class="flex-shrink-0">
+            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m0 0a2 2 0 012 2m-2-2a2 2 0 00-2 2m0 0a2 2 0 01-2 2m2-2a2 2 0 002 2M9 5a2 2 0 012 2v0a2 2 0 01-2 2m0 0a2 2 0 012 2v0a2 2 0 01-2 2m-2-2a2 2 0 00-2 2v0a2 2 0 01-2 2m2-2a2 2 0 012 2M7 5a2 2 0 012 2v0a2 2 0 01-2 2"></path>
+            </svg>
+          </div>
+          <div class="ml-4">
+            <h3 class="text-sm font-medium text-gray-900">토큰 관리</h3>
+            <p class="text-sm text-gray-500">API 액세스 토큰 관리</p>
+          </div>
+        </a>
+
+        <a href="/categories" class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div class="flex-shrink-0">
+            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path>
+            </svg>
+          </div>
+          <div class="ml-4">
+            <h3 class="text-sm font-medium text-gray-900">카테고리 관리</h3>
+            <p class="text-sm text-gray-500">데이터 분류 및 스키마 정의</p>
+          </div>
+        </a>
+
+        <a href="/data-explorer" class="flex items-center p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors">
+          <div class="flex-shrink-0">
+            <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+          </div>
+          <div class="ml-4">
+            <h3 class="text-sm font-medium text-gray-900">데이터 탐색기</h3>
+            <p class="text-sm text-gray-500">SQL 쿼리 실행 및 데이터 조회</p>
+          </div>
+        </a>
+      </div>
+    </div>
+  </div>
+</div>

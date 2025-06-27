@@ -1,0 +1,72 @@
+# tmiDB Development Environment with Hot Reload
+# Supervisor manages all internal services and uses Air for individual components
+
+services:
+  # --- Core Application with Supervisor ---
+  tmidb-core:
+    build:
+      context: ./tmidb-core
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8020:8020" # API Server
+      - "5432:5432" # PostgreSQL
+      - "4222:4222" # NATS
+      - "8333:8333" # SeaweedFS S3
+      - "9333:9333" # SeaweedFS Master
+      - "8081:8081" # SeaweedFS Volume
+    volumes:
+      # Mount source code for hot reload
+      - ./tmidb-core:/app:cached
+      # Mount data directories for persistence
+      - tmidb-data:/data
+      - tmidb-logs:/app/logs
+    environment:
+      - TMIDB_DEV_MODE=true
+      - TMIDB_LOG_LEVEL=debug
+      - TMIDB_HOT_RELOAD=true
+
+      - TMIDB_INIT_MODE=setup
+      - TMIDB_INIT_USER=admin
+      - TMIDB_INIT_PASSWORD=lighten_0208
+      - TMIDB_INIT_ADMIN_TOKEN=XzF9NQhH51NCx-zkg3wJE8KRAK4EBRc8GSn5uxEfQ5VkZeepMs1-Tyx1pnS9vra1TTMM-hCZJM9bfhkDeJ35qw==
+    # Supervisor runs directly and manages all internal processes
+    restart: unless-stopped
+
+  # --- Extension Applications ---
+
+  # tmidb-mqtt:
+  #   build:
+  #     context: ./tmidb-mqtt
+  #     dockerfile: Dockerfile.dev
+  #   ports:
+  #     - "1883:1883"         # MQTT
+  #     - "8083:8083"         # MQTT WebSocket
+  #     - "18083:18083"       # MQTT Dashboard
+  #   volumes:
+  #     - ./tmidb-mqtt:/app:cached
+  #   environment:
+  #     - TMIDB_DEV_MODE=true
+  #   restart: unless-stopped
+
+  # tmidb-realtime:
+  #   build:
+  #     context: ./tmidb-realtime
+  #     dockerfile: Dockerfile.dev
+  #   ports:
+  #     - "8081:8081"         # Realtime API
+  #   volumes:
+  #     - ./tmidb-realtime:/app:cached
+  #   environment:
+  #     - TMIDB_DEV_MODE=true
+  #   restart: unless-stopped
+
+volumes:
+  tmidb-data:
+    driver: local
+  tmidb-logs:
+    driver: local
+
+networks:
+  default:
+    name: tmidb-dev
+    driver: bridge

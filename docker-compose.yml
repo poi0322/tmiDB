@@ -1,112 +1,55 @@
-# tmiDB Core Services
-# 이 파일 하나로 tmiDB의 모든 핵심 구성요소를 로컬 환경에서 실행할 수 있습니다.
-# .env 파일에 정의된 환경변수를 자동으로 참조합니다.
-
+# tmiDB Production Services
 services:
-  # 1. Database Engine (PostgreSQL + TimescaleDB)
-  db:
-    image: timescale/timescaledb:latest-pg15
-    restart: always
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    command: >
-      postgres -c timescaledb.telemetry_level=off
-               -c timescaledb.license='apache'
-    volumes:
-      - db_data:/var/lib/postgresql/data
-      # 컨테이너 시작 시 ./initdb 폴더의 .sql 파일을 자동으로 실행합니다.
-      - ./initdb:/docker-entrypoint-initdb.d
-    ports:
-      - "${TMIDB_DB_PORT}:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # 2. REST API Server (PostgREST)
-  postgrest:
-    image: postgrest/postgrest:v11.2.2
-    restart: always
-    environment:
-      PGRST_DB_URI: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      PGRST_DB_ANON_ROLE: ${PGRST_DB_ANON_ROLE}
-      PGRST_DB_SCHEMAS: public
-      PGRST_OPENAPI_SERVER_PROXY_URI: http://localhost:${TMIDB_PGRST_PORT}
-    ports:
-      - "${TMIDB_PGRST_PORT}:3000"
-    depends_on:
-      db:
-        condition: service_healthy
-
-  # 3. Real-time Streaming Server (Supabase Realtime)
-  realtime:
-    image: supabase/realtime:v2.30.1
-    restart: always
-    environment:
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_USER: ${POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_NAME: ${POSTGRES_DB}
-      DB_SCHEMAS: public
-      JWT_SECRET: ${JWT_SECRET}
-      RLIMIT_NOFILE: 1048576
-    command: >
-      sh -c "ulimit -n 1048576 && /usr/bin/tini -s -g -- /app/bin/server"
-    ports:
-      - "${TMIDB_RT_PORT}:4000"
-    depends_on:
-      db:
-        condition: service_healthy
-
-  # 4. S3 Object Storage (SeaweedFS)
-  seaweed:
-    image: chrislusf/seaweedfs:3.67
-    restart: always
-    command: "server -s3 -dir=/data -volume.max=0"
-    volumes:
-      - weed_data:/data
-    ports:
-      - "${TMIDB_S3_PORT}:8333" # S3 Gateway Port
-      - "9333:9333" # Filer Port
-
-  # 5. Message Bus (NATS JetStream)
-  nats:
-    image: nats:2.10-alpine
-    restart: always
-    command: "--jetstream --store_dir=/data"
-    volumes:
-      - nats_data:/data
-    ports:
-      - "${TMIDB_NATS_PORT}:4222"
-
-  # 6. tmiDB Proxy Server (Go)
-  proxy:
+  # --- Core Application Services (from a single image) ---
+  tmidb-core:
+    image: poi0322/tmidb-core:0.1
     build:
-      context: ./tmidb-proxy
+      context: ./tmidb-core
       dockerfile: Dockerfile
-    restart: always
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      DB_HOST: db
-      DB_PORT: 5432
-      DB_NAME: ${POSTGRES_DB}
-      DB_USER: ${POSTGRES_USER}
-      DB_PASSWORD: ${POSTGRES_PASSWORD}
-      PORT: 8080
+    restart: unless-stopped
     ports:
-      - "${TMIDB_PROXY_PORT}:8080"
-    depends_on:
-      db:
-        condition: service_healthy
+      - "8020:8020"
+    environment:
+      - TMIDB_INIT_MODE=setup
+      # - TMIDB_INIT_MODE=migrate
+      # - TMIDB_INIT_MODE=run
+      - TMIDB_INIT_USER=admin
+      - TMIDB_INIT_PASSWORD=lighten_0208
+      - TMIDB_INIT_ADMIN_TOKEN=XzF9NQhH51NCx-zkg3wJE8KRAK4EBRc8GSn5uxEfQ5VkZeepMs1-Tyx1pnS9vra1TTMM-hCZJM9bfhkDeJ35qw==
+    volumes:
+      - ./docker-run/tmidb-core/db_data:/var/lib/postgresql/data
+      - ./docker-run/tmidb-core/nats_data:/data
+      - ./docker-run/tmidb-core/weed_data:/data
 
-# 데이터 영속성을 위한 Docker 볼륨 정의
+  # --- Extension Applications ---
+
+  tmidb-mqtt:
+    image: poi0322/tmidb-mqtt:0.1
+    build:
+      context: ./tmidb-mqtt
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "1883:1883"
+      - "8083:8083"
+    volumes:
+      - ./docker-run/tmidb-mqtt/emqx_data:/opt/emqx/data
+      - ./docker-run/tmidb-mqtt/emqx_log:/opt/emqx/log
+    depends_on:
+      - tmidb-core
+
+  tmidb-realtime:
+    image: poi0322/tmidb-realtime:0.1
+    build:
+      context: ./tmidb-realtime
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8081:8081"
+    volumes:
+      - ./docker-run/tmidb-realtime/realtime_data:/data
+    depends_on:
+      - tmidb-core
+
 volumes:
   db_data:
-  weed_data:
-  nats_data:

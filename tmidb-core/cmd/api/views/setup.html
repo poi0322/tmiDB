@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{.title}} - tmiDB</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="max-w-md w-full space-y-8">
+    <div>
+      <h2 class="mt-6 text-center text-3xl font-extrabold text-gray-900">
+        tmiDB 초기 설정
+      </h2>
+      <p class="mt-2 text-center text-sm text-gray-600">
+        관리자 계정을 생성해주세요
+      </p>
+      <div class="mt-4 bg-yellow-50 border border-yellow-200 rounded-md p-4">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+            </svg>
+          </div>
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-yellow-800">
+              시간 제한 안내
+            </h3>
+            <div class="mt-2 text-sm text-yellow-700">
+              <p>설정을 완료하는데 30분의 시간이 주어집니다. 시간 내에 설정을 완료하지 않으면 시스템이 잠깁니다.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <form id="setupForm" class="mt-8 space-y-6">
+      <div class="rounded-md shadow-sm -space-y-px">
+        <div>
+          <label for="org_name" class="sr-only">조직 이름</label>
+          <input id="org_name" name="org_name" type="text" required class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" placeholder="조직 이름">
+        </div>
+        <div>
+          <label for="username" class="sr-only">사용자명</label>
+          <input id="username" name="username" type="text" required class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" placeholder="사용자명">
+        </div>
+        <div>
+          <label for="password" class="sr-only">비밀번호</label>
+          <input id="password" name="password" type="password" required class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" placeholder="비밀번호 (최소 8자)">
+        </div>
+        <div>
+          <label for="confirm_password" class="sr-only">비밀번호 확인</label>
+          <input id="confirm_password" name="confirm_password" type="password" required class="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm" placeholder="비밀번호 확인">
+        </div>
+      </div>
+
+      <div id="errorMessage" class="hidden bg-red-50 border border-red-200 rounded-md p-4">
+        <div class="flex">
+          <div class="flex-shrink-0">
+            <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+            </svg>
+          </div>
+          <div class="ml-3">
+            <h3 class="text-sm font-medium text-red-800" id="errorTitle">오류</h3>
+            <div class="mt-2 text-sm text-red-700" id="errorText"></div>
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <button type="submit" id="submitBtn" class="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          설정 완료
+        </button>
+      </div>
+    </form>
+
+    <!-- 성공 모달 -->
+    <div id="successModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+      <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 lg:w-1/2 shadow-lg rounded-md bg-white">
+        <div class="mt-3 text-center">
+          <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+            <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+            </svg>
+          </div>
+          <h3 class="text-lg leading-6 font-medium text-gray-900 mt-4">설정 완료!</h3>
+          <div class="mt-2 px-7 py-3">
+            <p class="text-sm text-gray-500">
+              관리자 계정이 성공적으로 생성되었습니다.
+            </p>
+            <div class="mt-4 bg-gray-50 p-4 rounded-md">
+              <h4 class="text-sm font-medium text-gray-900">액세스 토큰</h4>
+              <p class="text-xs text-gray-600 mt-1">API 접근을 위한 토큰입니다. 안전한 곳에 보관하세요.</p>
+              <div class="mt-2 flex items-center space-x-2">
+                <input type="text" id="accessToken" readonly class="flex-1 text-xs bg-white border border-gray-300 rounded px-2 py-1 font-mono">
+                <button onclick="copyToken()" class="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600">
+                  복사
+                </button>
+              </div>
+            </div>
+          </div>
+          <div class="items-center px-4 py-3">
+            <button onclick="goToLogin()" class="px-4 py-2 bg-green-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-green-600 focus:outline-none focus:ring-2 focus:ring-green-300">
+              로그인하기
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById('setupForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const submitBtn = document.getElementById('submitBtn');
+      const errorDiv = document.getElementById('errorMessage');
+      const errorText = document.getElementById('errorText');
+
+      const orgName = document.getElementById('org_name').value;
+      const username = document.getElementById('username').value;
+      const password = document.getElementById('password').value;
+      const confirmPassword = document.getElementById('confirm_password').value;
+
+      errorDiv.classList.add('hidden');
+
+      if (password !== confirmPassword) {
+        errorText.textContent = '비밀번호가 일치하지 않습니다.';
+        errorDiv.classList.remove('hidden');
+        return;
+      }
+      if (password.length < 8) {
+        errorText.textContent = '비밀번호는 최소 8자 이상이어야 합니다.';
+        errorDiv.classList.remove('hidden');
+        return;
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = '설정 중...';
+
+      try {
+        const response = await fetch('/setup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            org_name: orgName,
+            username: username,
+            password: password
+          })
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          document.getElementById('accessToken').value = result.token;
+          document.getElementById('successModal').classList.remove('hidden');
+        } else {
+          throw new Error(result.error || '설정 실패');
+        }
+      } catch (error) {
+        errorText.textContent = error.message;
+        errorDiv.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = '설정 완료';
+      }
+    });
+
+    function copyToken() {
+      const tokenInput = document.getElementById('accessToken');
+      tokenInput.select();
+      document.execCommand('copy');
+
+      const btn = event.target;
+      const originalText = btn.textContent;
+      btn.textContent = '복사됨!';
+      btn.classList.add('bg-green-500');
+      btn.classList.remove('bg-blue-500');
+
+      setTimeout(() => {
+        btn.textContent = originalText;
+        btn.classList.remove('bg-green-500');
+        btn.classList.add('bg-blue-500');
+      }, 2000);
+    }
+
+    function goToLogin() {
+      window.location.href = '/login';
+    }
+  </script>
+</body>
+
+</html>

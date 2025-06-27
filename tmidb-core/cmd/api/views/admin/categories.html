@@ -1,0 +1,197 @@
+<div class="container mx-auto px-4 py-8 max-w-7xl">
+  <!-- 헤더 -->
+  <div class="mb-8 flex justify-between items-center">
+    <div>
+      <h1 class="text-3xl font-bold text-gray-900">카테고리 관리</h1>
+      <p class="mt-2 text-gray-600">데이터 스키마를 정의하고 관리합니다.</p>
+    </div>
+    <button onclick="openCategoryModal()" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+      새 카테고리 추가
+    </button>
+  </div>
+
+  <!-- 카테고리 목록 -->
+  <div id="categoriesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <!-- 카테고리 카드가 여기에 동적으로 추가됩니다 -->
+  </div>
+</div>
+
+<!-- 카테고리 추가/편집 모달 -->
+<div id="categoryModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+  <div class="relative top-10 mx-auto p-5 border w-11/12 md:max-w-2xl shadow-lg rounded-md bg-white">
+    <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4" id="categoryModalTitle">새 카테고리</h3>
+    <form id="categoryForm" class="space-y-4">
+      <input type="hidden" id="originalCategoryName" name="originalCategoryName">
+      <div>
+        <label for="categoryName" class="block text-sm font-medium text-gray-700">카테고리 이름</label>
+        <input type="text" id="categoryName" name="categoryName" required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm" placeholder="예: users, products">
+      </div>
+      <div>
+        <label for="categoryDescription" class="block text-sm font-medium text-gray-700">설명</label>
+        <textarea id="categoryDescription" name="categoryDescription" rows="2" class="mt-1 block w-full border-gray-300 rounded-md shadow-sm"></textarea>
+      </div>
+      <div>
+        <label for="schemaDefinition" class="block text-sm font-medium text-gray-700">스키마 정의 (JSON)</label>
+        <div id="jsonEditor" style="height: 300px;" class="mt-1 border border-gray-300 rounded-md"></div>
+        <input type="hidden" id="schema" name="schema">
+        <p class="mt-1 text-xs text-gray-500">
+          <a href="https://json-schema.org/learn/getting-started-step-by-step" target="_blank" class="text-indigo-600 hover:underline">JSON Schema</a> 형식으로 작성해주세요. `properties` 안에 필드를 정의해야 합니다.
+        </p>
+      </div>
+      <div class="flex justify-end space-x-2">
+        <button type="button" onclick="closeCategoryModal()" class="px-4 py-2 border rounded-md">취소</button>
+        <button type="submit" class="px-4 py-2 bg-indigo-600 text-white rounded-md">저장</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- JSON Editor 스크립트 로드 -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+
+<script>
+  let editor;
+
+  document.addEventListener('DOMContentLoaded', function() {
+    loadCategories();
+
+    editor = CodeMirror(document.getElementById('jsonEditor'), {
+      mode: {
+        name: "javascript",
+        json: true
+      },
+      lineNumbers: true,
+      value: '{\n  "type": "object",\n  "properties": {\n    \n  }\n}'
+    });
+
+    document.getElementById('categoryForm').addEventListener('submit', handleFormSubmit);
+  });
+
+  async function loadCategories() {
+    try {
+      const response = await fetch('/api/categories');
+      const result = await response.json();
+      const list = document.getElementById('categoriesList');
+      if (result.categories && result.categories.length > 0) {
+        list.innerHTML = result.categories.map(cat => createCategoryCard(cat)).join('');
+      } else {
+        list.innerHTML = `<p class="text-gray-500 col-span-full text-center py-8">카테고리가 없습니다. 새 카테고리를 추가해보세요.</p>`;
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      document.getElementById('categoriesList').innerHTML = `<p class="text-red-500 col-span-full">카테고리 로딩 실패</p>`;
+    }
+  }
+
+  function createCategoryCard(cat) {
+    return `
+            <div class="bg-white shadow rounded-lg p-5 flex flex-col justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold text-gray-800">${cat.name}</h3>
+                    <p class="text-sm text-gray-600 mt-1 h-10">${cat.description || '설명이 없습니다.'}</p>
+                </div>
+                <div class="mt-4 flex justify-end space-x-2">
+                    <button onclick="editCategory('${cat.name}')" class="text-sm px-3 py-1 border rounded-md">편집</button>
+                    <button onclick="deleteCategory('${cat.name}')" class="text-sm px-3 py-1 bg-red-500 text-white rounded-md">삭제</button>
+                </div>
+            </div>
+        `;
+  }
+
+  function openCategoryModal() {
+    document.getElementById('categoryForm').reset();
+    document.getElementById('categoryModalTitle').textContent = '새 카테고리';
+    document.getElementById('originalCategoryName').value = '';
+    editor.setValue('{\n  "type": "object",\n  "properties": {\n    \n  }\n}');
+    document.getElementById('categoryModal').classList.remove('hidden');
+    editor.refresh();
+  }
+
+  function closeCategoryModal() {
+    document.getElementById('categoryModal').classList.add('hidden');
+  }
+
+  async function editCategory(name) {
+    try {
+      const response = await fetch(`/api/categories/${name}/schema`);
+      const cat = await response.json();
+
+      document.getElementById('categoryModalTitle').textContent = `카테고리 편집: ${cat.name}`;
+      document.getElementById('originalCategoryName').value = cat.name;
+      document.getElementById('categoryName').value = cat.name;
+      document.getElementById('categoryDescription').value = cat.description;
+      editor.setValue(JSON.stringify(cat.schema, null, 2));
+
+      document.getElementById('categoryModal').classList.remove('hidden');
+      editor.refresh();
+    } catch (error) {
+      alert('카테고리 정보를 불러오는데 실패했습니다.');
+      console.error(error);
+    }
+  }
+
+  async function handleFormSubmit(e) {
+    e.preventDefault();
+    const form = e.target;
+    const originalName = form.originalCategoryName.value;
+    const isEditing = !!originalName;
+
+    const url = isEditing ? `/api/categories/${originalName}` : '/api/categories';
+    const method = isEditing ? 'PUT' : 'POST';
+
+    let schema;
+    try {
+      schema = JSON.parse(editor.getValue());
+    } catch (err) {
+      alert('스키마의 JSON 형식이 올바르지 않습니다.');
+      return;
+    }
+
+    const body = {
+      name: form.categoryName.value,
+      description: form.categoryDescription.value,
+      schema: schema
+    };
+
+    try {
+      const response = await fetch(url, {
+        method: method,
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+      });
+      const result = await response.json();
+      if (response.ok) {
+        closeCategoryModal();
+        loadCategories();
+      } else {
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      alert('저장 중 오류가 발생했습니다.');
+      console.error(error);
+    }
+  }
+
+  async function deleteCategory(name) {
+    if (!confirm(`'${name}' 카테고리를 정말 삭제하시겠습니까?`)) return;
+
+    try {
+      const response = await fetch(`/api/categories/${name}`, {
+        method: 'DELETE'
+      });
+      if (response.ok) {
+        loadCategories();
+      } else {
+        const result = await response.json();
+        alert(`Error: ${result.error}`);
+      }
+    } catch (error) {
+      alert('삭제 중 오류가 발생했습니다.');
+      console.error(error);
+    }
+  }
+</script>

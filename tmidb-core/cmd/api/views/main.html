@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>
+    {{ .title }} - tmiDB Admin
+  </title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100">
+  <div class="flex h-screen">
+    <!-- Sidebar -->
+    <nav class="w-64 bg-white shadow-lg">
+      <div class="p-6">
+        <h1 class="text-xl font-bold text-gray-800">tmiDB Admin</h1>
+      </div>
+      <ul class="mt-6">
+        <li><a href="/dashboard" class="block px-6 py-3 text-gray-700 hover:bg-gray-100">Dashboard</a></li>
+        <li><a href="/users" class="block px-6 py-3 text-gray-700 hover:bg-gray-100">Users</a></li>
+        <li><a href="/categories" class="block px-6 py-3 text-gray-700 hover:bg-gray-100">Categories</a></li>
+        <li><a href="/listeners" class="block px-6 py-3 text-gray-700 hover:bg-gray-100">Listeners</a></li>
+        <li><a href="/tokens" class="block px-6 py-3 text-gray-700 hover:bg-gray-100">Tokens</a></li>
+        <li><a href="/data-explorer" class="block px-6 py-3 text-gray-700 hover:bg-gray-100">Data Explorer</a></li>
+        <li><a href="/logout" class="block px-6 py-3 text-gray-700 hover:bg-gray-100">Logout</a></li>
+      </ul>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="flex-1 p-10">
+      {{embed}}
+    </main>
+  </div>
+</body>
+
+</html>
