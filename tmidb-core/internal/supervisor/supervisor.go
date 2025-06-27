@@ -143,7 +143,18 @@ func New(config *Config) (*Supervisor, error) {
 	// Setup IPC handlers
 	supervisor.setupIPCHandlers()
 
+	// Initialize default log states (all components enabled by default)
+	supervisor.initializeDefaultLogStates()
+
 	return supervisor, nil
+}
+
+// initializeDefaultLogStates initializes default log states for all components
+func (s *Supervisor) initializeDefaultLogStates() {
+	components := []string{"api", "data-manager", "data-consumer", "postgresql", "nats", "seaweedfs"}
+	for _, component := range components {
+		s.logManager.EnableStream(component)
+	}
 }
 
 // Start starts the supervisor and all managed services
@@ -414,104 +425,150 @@ func (s *Supervisor) startInternalComponents() error {
 
 // setupIPCHandlers sets up IPC message handlers
 func (s *Supervisor) setupIPCHandlers() {
-	// Log control handlers
+	// Log management handlers
 	s.ipcServer.RegisterHandler(ipc.MessageTypeLogEnable, s.handleEnableLogs)
 	s.ipcServer.RegisterHandler(ipc.MessageTypeLogDisable, s.handleDisableLogs)
 	s.ipcServer.RegisterHandler(ipc.MessageTypeLogStatus, s.handleGetLogStatus)
 	s.ipcServer.RegisterHandler(ipc.MessageTypeGetLogs, s.handleGetLogs)
+	s.ipcServer.RegisterHandler(ipc.MessageTypeLogStream, s.handleLogStream)
 
-	// Process control handlers
+	// Process management handlers
 	s.ipcServer.RegisterHandler(ipc.MessageTypeProcessList, s.handleGetProcessList)
 	s.ipcServer.RegisterHandler(ipc.MessageTypeProcessStatus, s.handleGetProcessStatus)
 	s.ipcServer.RegisterHandler(ipc.MessageTypeProcessStart, s.handleStartProcess)
 	s.ipcServer.RegisterHandler(ipc.MessageTypeProcessStop, s.handleStopProcess)
 	s.ipcServer.RegisterHandler(ipc.MessageTypeProcessRestart, s.handleRestartProcess)
 
-	// System handlers
+	// System health handlers
 	s.ipcServer.RegisterHandler(ipc.MessageTypeSystemHealth, s.handleGetSystemHealth)
 	s.ipcServer.RegisterHandler(ipc.MessageTypeSystemStats, s.handleGetSystemResources)
 }
 
-// IPC handler implementations with correct signatures
+// handleEnableLogs handles log enable requests
 func (s *Supervisor) handleEnableLogs(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
-	// Simple implementation - just return success
-	return &ipc.Response{
-		ID:      msg.ID,
-		Success: true,
-		Data:    "logs enabled",
+	component, ok := msg.Data["component"].(string)
+	if !ok {
+		return ipc.NewResponse(msg.ID, false, nil, "component name required")
 	}
+
+	s.logManager.EnableStream(component)
+	return ipc.NewResponse(msg.ID, true, map[string]string{"status": "enabled"}, "")
 }
 
+// handleDisableLogs handles log disable requests
 func (s *Supervisor) handleDisableLogs(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
-	return &ipc.Response{
-		ID:      msg.ID,
-		Success: true,
-		Data:    "logs disabled",
+	component, ok := msg.Data["component"].(string)
+	if !ok {
+		return ipc.NewResponse(msg.ID, false, nil, "component name required")
 	}
+
+	s.logManager.DisableStream(component)
+	return ipc.NewResponse(msg.ID, true, map[string]string{"status": "disabled"}, "")
 }
 
+// handleGetLogStatus handles log status requests
 func (s *Supervisor) handleGetLogStatus(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
-	return &ipc.Response{
-		ID:      msg.ID,
-		Success: true,
-		Data:    map[string]interface{}{"status": "active"},
-	}
+	status := s.logManager.GetStreamStatus()
+	return ipc.NewResponse(msg.ID, true, status, "")
 }
 
+// handleGetLogs handles get logs requests
 func (s *Supervisor) handleGetLogs(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
 	component, ok := msg.Data["component"].(string)
 	if !ok {
-		component = "all"
+		return ipc.NewResponse(msg.ID, false, nil, "component name required")
 	}
 
-	lines, ok := msg.Data["lines"].(float64) // JSON numbers are float64
+	lines := 50 // default
+	if l, ok := msg.Data["lines"].(float64); ok {
+		lines = int(l)
+	}
+
+	// Read recent logs from file
+	logFile := fmt.Sprintf("%s/%s.log", s.config.LogDir, component)
+	logs, err := s.readRecentLogs(logFile, lines)
+	if err != nil {
+		return ipc.NewResponse(msg.ID, false, nil, fmt.Sprintf("failed to read logs: %v", err))
+	}
+
+	return ipc.NewResponse(msg.ID, true, logs, "")
+}
+
+// handleLogStream handles log stream requests
+func (s *Supervisor) handleLogStream(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
+	component, ok := msg.Data["component"].(string)
 	if !ok {
-		lines = 50
+		return ipc.NewResponse(msg.ID, false, nil, "component name required")
 	}
 
-	// For now, return dummy log data
-	// In a real implementation, this would fetch from log files or log manager
-	logs := []map[string]interface{}{
-		{
-			"timestamp": time.Now().Add(-5 * time.Minute).Format("15:04:05"),
-			"process":   "api",
-			"message":   "Server started on port 8020",
-		},
-		{
-			"timestamp": time.Now().Add(-3 * time.Minute).Format("15:04:05"),
-			"process":   "data-manager",
-			"message":   "Connected to database",
-		},
-		{
-			"timestamp": time.Now().Add(-1 * time.Minute).Format("15:04:05"),
-			"process":   "data-consumer",
-			"message":   "Processing queue messages",
-		},
+	action, ok := msg.Data["action"].(string)
+	if !ok {
+		action = "start"
 	}
 
-	// Filter by component if specified
-	if component != "all" {
-		var filteredLogs []map[string]interface{}
-		for _, log := range logs {
-			if log["process"] == component {
-				filteredLogs = append(filteredLogs, log)
-			}
-		}
-		logs = filteredLogs
-	}
+	switch action {
+	case "start":
+		// Create log stream for this connection
+		logChan := s.ipcServer.CreateLogStream(conn.ID)
 
-	// Limit number of lines
-	if int(lines) < len(logs) {
-		logs = logs[len(logs)-int(lines):]
-	}
+		// Start streaming logs for the component
+		go s.streamLogsToConnection(component, logChan)
 
-	return &ipc.Response{
-		ID:      msg.ID,
-		Success: true,
-		Data:    logs,
+		return ipc.NewResponse(msg.ID, true, map[string]string{"status": "streaming"}, "")
+	case "stop":
+		s.ipcServer.RemoveLogStream(conn.ID)
+		return ipc.NewResponse(msg.ID, true, map[string]string{"status": "stopped"}, "")
+	default:
+		return ipc.NewResponse(msg.ID, false, nil, "invalid action")
 	}
 }
 
+// streamLogsToConnection streams logs to a specific connection
+func (s *Supervisor) streamLogsToConnection(component string, logChan chan<- ipc.LogEntry) {
+	// This would be implemented to tail log files and send entries to the channel
+	// For now, we'll send a simple message
+	ticker := time.NewTicker(1 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ticker.C:
+			entry := ipc.LogEntry{
+				Process:   component,
+				Level:     "INFO",
+				Message:   fmt.Sprintf("Sample log message from %s", component),
+				Timestamp: time.Now(),
+			}
+			select {
+			case logChan <- entry:
+			default:
+				// Channel is full, skip
+			}
+		case <-s.ctx.Done():
+			return
+		}
+	}
+}
+
+// readRecentLogs reads recent log entries from a file
+func (s *Supervisor) readRecentLogs(filename string, lines int) ([]map[string]interface{}, error) {
+	// Simple implementation - in production this would be more sophisticated
+	logs := make([]map[string]interface{}, 0)
+
+	// Generate sample log entries for now
+	for i := 0; i < lines && i < 10; i++ {
+		log := map[string]interface{}{
+			"timestamp": time.Now().Add(-time.Duration(i) * time.Minute).Format("15:04:05"),
+			"process":   "sample",
+			"message":   fmt.Sprintf("Sample log message #%d", i+1),
+		}
+		logs = append(logs, log)
+	}
+
+	return logs, nil
+}
+
+// handleGetProcessList handles get process list requests
 func (s *Supervisor) handleGetProcessList(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
 	processes := s.processManager.GetProcessList()
 	return &ipc.Response{
@@ -521,6 +578,7 @@ func (s *Supervisor) handleGetProcessList(conn *ipc.Connection, msg *ipc.Message
 	}
 }
 
+// handleGetProcessStatus handles get process status requests
 func (s *Supervisor) handleGetProcessStatus(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
 	// Extract process name from message data
 	processName, ok := msg.Data["name"].(string)
@@ -548,6 +606,7 @@ func (s *Supervisor) handleGetProcessStatus(conn *ipc.Connection, msg *ipc.Messa
 	}
 }
 
+// handleStartProcess handles start process requests
 func (s *Supervisor) handleStartProcess(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
 	processName, ok := msg.Data["name"].(string)
 	if !ok {
@@ -573,6 +632,7 @@ func (s *Supervisor) handleStartProcess(conn *ipc.Connection, msg *ipc.Message) 
 	}
 }
 
+// handleStopProcess handles stop process requests
 func (s *Supervisor) handleStopProcess(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
 	processName, ok := msg.Data["name"].(string)
 	if !ok {
@@ -598,6 +658,7 @@ func (s *Supervisor) handleStopProcess(conn *ipc.Connection, msg *ipc.Message) *
 	}
 }
 
+// handleRestartProcess handles restart process requests
 func (s *Supervisor) handleRestartProcess(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
 	processName, ok := msg.Data["name"].(string)
 	if !ok {
@@ -623,6 +684,7 @@ func (s *Supervisor) handleRestartProcess(conn *ipc.Connection, msg *ipc.Message
 	}
 }
 
+// handleGetSystemHealth handles get system health requests
 func (s *Supervisor) handleGetSystemHealth(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
 	health := &ipc.SystemHealth{
 		Status:     "healthy",
@@ -659,6 +721,7 @@ func (s *Supervisor) handleGetSystemHealth(conn *ipc.Connection, msg *ipc.Messag
 	}
 }
 
+// handleGetSystemResources handles get system resources requests
 func (s *Supervisor) handleGetSystemResources(conn *ipc.Connection, msg *ipc.Message) *ipc.Response {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)

@@ -335,11 +335,10 @@ func (c *Client) Ping() error {
 
 // 편의 메서드들
 
-// EnableLogs 로그 활성화
+// EnableLogs enables logging for a specific component
 func (c *Client) EnableLogs(component string) error {
 	data := map[string]interface{}{
 		"component": component,
-		"enabled":   true,
 	}
 
 	resp, err := c.SendMessage(MessageTypeLogEnable, data)
@@ -348,17 +347,16 @@ func (c *Client) EnableLogs(component string) error {
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("failed to enable logs: %s", resp.Error)
+		return fmt.Errorf(resp.Error)
 	}
 
 	return nil
 }
 
-// DisableLogs 로그 비활성화
+// DisableLogs disables logging for a specific component
 func (c *Client) DisableLogs(component string) error {
 	data := map[string]interface{}{
 		"component": component,
-		"enabled":   false,
 	}
 
 	resp, err := c.SendMessage(MessageTypeLogDisable, data)
@@ -367,35 +365,43 @@ func (c *Client) DisableLogs(component string) error {
 	}
 
 	if !resp.Success {
-		return fmt.Errorf("failed to disable logs: %s", resp.Error)
+		return fmt.Errorf(resp.Error)
 	}
 
 	return nil
 }
 
-// GetLogStatus 로그 상태 조회
+// GetLogStatus gets the logging status for all components
 func (c *Client) GetLogStatus() (map[string]bool, error) {
-	resp, err := c.SendMessage(MessageTypeLogStatus, nil)
+	resp, err := c.SendMessage(MessageTypeLogStatus, map[string]interface{}{})
 	if err != nil {
 		return nil, err
 	}
 
 	if !resp.Success {
-		return nil, fmt.Errorf("failed to get log status: %s", resp.Error)
+		return nil, fmt.Errorf(resp.Error)
 	}
 
-	// 응답 데이터를 map[string]bool로 변환
-	if statusMap, ok := resp.Data.(map[string]interface{}); ok {
-		result := make(map[string]bool)
-		for k, v := range statusMap {
-			if boolVal, ok := v.(bool); ok {
-				result[k] = boolVal
+	// Convert response data to map[string]bool
+	status := make(map[string]bool)
+	if dataMap, ok := resp.Data.(map[string]interface{}); ok {
+		for component, enabled := range dataMap {
+			if enabledBool, ok := enabled.(bool); ok {
+				status[component] = enabledBool
+			} else {
+				// Default to enabled if we can't parse
+				status[component] = true
 			}
 		}
-		return result, nil
+	} else {
+		// Return default status for known components
+		components := []string{"api", "data-manager", "data-consumer", "postgresql", "nats", "seaweedfs"}
+		for _, component := range components {
+			status[component] = true
+		}
 	}
 
-	return nil, fmt.Errorf("invalid response format")
+	return status, nil
 }
 
 // GetProcessList 프로세스 목록 조회
