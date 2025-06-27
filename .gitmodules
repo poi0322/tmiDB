@@ -1,0 +1,9 @@
+[submodule "tmidb-core"]
+	path = tmidb-core
+	url = https://github.com/poi0322/tmidb-core.git
+[submodule "tmidb-mqtt"]
+	path = tmidb-mqtt
+	url = https://github.com/poi0322/tmidb-mqtt.git
+[submodule "tmidb-realtime"]
+	path = tmidb-realtime
+	url = https://github.com/poi0322/tmidb-realtime.git
