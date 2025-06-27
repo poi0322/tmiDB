@@ -1,0 +1,59 @@
+name: Update Submodules
+
+on:
+  # 매일 한국 시간 오전 9시에 실행 (UTC 00:00)
+  schedule:
+    - cron: "0 0 * * *"
+
+  # 수동 실행 가능
+  workflow_dispatch:
+
+  # 개별 submodule 저장소에서 push가 발생할 때 실행 (webhook 설정 필요)
+  repository_dispatch:
+    types: [submodule-updated]
+
+jobs:
+  update-submodules:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout 메인 저장소
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          submodules: recursive
+
+      - name: Git 사용자 설정
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+
+      - name: Submodules 최신 버전으로 업데이트
+        run: |
+          git submodule update --remote --merge
+
+      - name: 변경사항 확인
+        id: verify-changed-files
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 변경사항 커밋 및 푸시
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        run: |
+          TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+          git add .
+          git commit -m "🤖 Auto-update submodules to latest versions (${TIMESTAMP})"
+          git push
+
+      - name: 업데이트 결과 출력
+        run: |
+          if [ "${{ steps.verify-changed-files.outputs.changed }}" == "true" ]; then
+            echo "✅ Submodules가 성공적으로 업데이트되었습니다!"
+            git submodule status
+          else
+            echo "ℹ️ 모든 submodules가 이미 최신 버전입니다."
+          fi
