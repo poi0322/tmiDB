@@ -1,4 +1,4 @@
-name: Update Submodules
+name: Update Submodules and Build Image
 
 on:
   # 매일 한국 시간 오전 9시에 실행 (UTC 00:00)
@@ -13,7 +13,7 @@ on:
     types: [submodule-updated]
 
 jobs:
-  update-submodules:
+  update-and-build:
     runs-on: ubuntu-latest
 
     steps:
@@ -37,23 +37,67 @@ jobs:
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             echo "changed=true" >> $GITHUB_OUTPUT
+            CHANGES=$(git status --porcelain | grep ' M ' | awk '{print $2}' | paste -sd ', ' -)
+            echo "changes_list=${CHANGES}" >> $GITHUB_OUTPUT
           else
             echo "changed=false" >> $GITHUB_OUTPUT
           fi
+
+      - name: 변경사항이 없을 경우 중단
+        if: steps.verify-changed-files.outputs.changed != 'true'
+        run: echo "ℹ️ 모든 submodules가 이미 최신 버전입니다. 빌드를 건너뜁니다."
 
       - name: 변경사항 커밋 및 푸시
         if: steps.verify-changed-files.outputs.changed == 'true'
         run: |
           TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+          COMMIT_MSG="🤖 Auto-update submodules: ${{ steps.verify-changed-files.outputs.changes_list }} (${TIMESTAMP})"
           git add .
-          git commit -m "🤖 Auto-update submodules to latest versions (${TIMESTAMP})"
+          git commit -m "${COMMIT_MSG}"
           git push
 
-      - name: 업데이트 결과 출력
+      - name: Docker Hub 로그인
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Docker 메타데이터 설정 (태그 등)
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: your-dockerhub-username/tmidb-core
+          tags: |
+            type=schedule,pattern=nightly-{{date 'YYYYMMDD'}}
+            type=sha,prefix=
+            latest
+
+      - name: Docker Buildx 설정
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: tmidb-core 이미지 빌드 및 푸시
+        if: steps.verify-changed-files.outputs.changed == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: ./tmidb-core
+          file: ./tmidb-core/Dockerfile
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: 업데이트 및 빌드 결과 출력
+        if: steps.verify-changed-files.outputs.changed == 'true'
         run: |
-          if [ "${{ steps.verify-changed-files.outputs.changed }}" == "true" ]; then
-            echo "✅ Submodules가 성공적으로 업데이트되었습니다!"
-            git submodule status
-          else
-            echo "ℹ️ 모든 submodules가 이미 최신 버전입니다."
-          fi
+          echo "✅ Submodules가 성공적으로 업데이트되고, 이미지가 빌드/푸시되었습니다!"
+          echo "Updated submodules: ${{ steps.verify-changed-files.outputs.changes_list }}"
+          echo "Pushed image tags: ${{ steps.meta.outputs.tags }}"
+
+      - name: 업데이트 결과 출력 (변경사항 없음)
+        if: steps.verify-changed-files.outputs.changed != 'true'
+        run: |
+          echo "ℹ️ 모든 submodules가 이미 최신 버전입니다."
