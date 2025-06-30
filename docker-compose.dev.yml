@@ -16,7 +16,7 @@ services:
       - "8081:8081" # SeaweedFS Volume
     volumes:
       # Mount source code for hot reload
-      - ./tmidb-core:/app:cached
+      # - ./tmidb-core:/app:cached
       # Mount data directories for persistence
       - tmidb-data:/data
       - tmidb-logs:/app/logs
